@@ -8,4 +8,4 @@ def files() -> dict[str, str]:
 
 def logos() -> dict[str, str]:
     found = {k: v['data'] for k, v in (db.setting('platform_logos', {}) or {}).items() if isinstance(v, dict) and str(v.get('data', '')).startswith('data:image/')}
-    return {**found, **files()}
+    return {**files(), **found}

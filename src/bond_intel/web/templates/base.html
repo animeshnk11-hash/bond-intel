@@ -8,7 +8,7 @@
 {%- if user and user.mode == 'public' %}
 <meta name="robots" content="noindex, nofollow">
 {%- endif %}
-<link rel="stylesheet" href="/static/app.css?v=3">
+<link rel="stylesheet" href="/static/app.css?v={{ asset_v('app.css') }}">
 {% block head %}{% endblock %}
 </head>
 <body>
@@ -40,7 +40,7 @@
 </div>
 <div id="drawer-bg" class="drawer-bg"></div>
 {% block drawers %}{% endblock %}
-<script src="/static/app.js?v=2"></script>
+<script src="/static/app.js?v={{ asset_v('app.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

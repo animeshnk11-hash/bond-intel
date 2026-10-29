@@ -435,6 +435,17 @@ form.inline { display: inline; }
 .sev.info { background: #9AA0B4; }
 tr.muted-row td { color: var(--muted); }
 .actions-row { gap: 8px; margin-bottom: 8px; }
+/* the platform drawer's actions: one row of same-height buttons under the address, then the Sources link */
+.drawer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.drawer-actions:empty { display: none; }
+.drawer-actions form.inline { display: contents; }
+.drawer-actions .btn.sm { height: 32px; }
+.drawer-actions-link { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 12.5px; }
+.drawer-actions-link svg { width: 14px; height: 14px; }
+/* "Being added or stopped": the row's buttons side by side, right-aligned */
+#being-added td.num { white-space: nowrap; }
+#being-added td.num > * { vertical-align: middle; }
+#being-added td.num form.inline { margin-left: 6px; }
 .alertrow { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 td.note-cell { font-size: 12.5px; color: var(--text-2); max-width: 220px; }
 .feedgrid td { white-space: nowrap; }
