@@ -5,7 +5,7 @@
 | Product | Bond Intel, Blostem's bond-market intelligence tool |
 | Owner | Product (Bonds) |
 | Status | Live: internal dashboard, public read-only dashboard, daily report, API |
-| Links | Public read-only dashboard: <https://bond-intel.onrender.com> · Internal dashboard: for the Bonds team |
+| Links | Public read-only dashboard: <https://bond-intel.vercel.app> · Internal dashboard: for the Bonds team |
 | Updated | 29 Oct 2026 |
 
 See also: [System design](system-design.md) · [User flows](user-flows.md) · [API](api.md) · [API sequence diagrams](api-sequence.md)
