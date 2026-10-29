@@ -1,14 +1,13 @@
 from __future__ import annotations
 from collections import Counter, defaultdict
-from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from bond_intel.reference.categories import Categories
 from bond_intel.web import auth, charts, db
 from bond_intel.web.app import LAYOUT_Q, page
+from bond_intel.web.logos import logos
 router = APIRouter()
 UNCLASSIFIED = 'Not yet classified'
-LOGOS = {p.stem: f'/static/logos/{p.name}' for p in (Path(__file__).parent.parent / 'static' / 'logos').iterdir() if p.suffix in ('.png', '.svg')}
 LISTINGS_SQL = "\nSELECT t.task_key, t.name AS platform, t.status, l.snap_date, l.isin, l.issuer, i.issuer_name AS nsdl_issuer,\n       i.category AS nsdl_category\n  FROM ops.task t\n  JOIN LATERAL (SELECT max(x.snap_date) AS d FROM obpp.listing_daily x WHERE x.source_key = t.task_key) m ON true\n  JOIN obpp.listing_daily l ON l.source_key = t.task_key AND l.snap_date = m.d\n  LEFT JOIN ref.instrument i ON i.isin = l.isin::bpchar\n WHERE t.kind = 'obpp_site' AND t.status IN ('live', 'paused')\n"
 
 def load() -> dict | None:
@@ -35,7 +34,8 @@ def categories(request: Request):
     def note(k: str) -> str | None:
         s = sites[k]
         return f"{s['status']} · {s['snap_date']:%d %b}" if s['snap_date'] < last else None
-    cols = [{'key': k, 'label': sites[k]['platform'], 'logo': LOGOS.get(k), 'note': note(k)} for k in keys]
+    logo = logos()
+    cols = [{'key': k, 'label': sites[k]['platform'], 'logo': logo.get(k), 'note': note(k)} for k in keys]
 
     def only_on(c: Counter) -> str | None:
         on = [k for k in keys if c[k]]
@@ -51,4 +51,4 @@ def categories(request: Request):
     heat = charts.share_heat(cols, groups, {'label': 'All categories', 'counts': [by_site[k] for k in keys]})
     classified = [c for c in counts if c != UNCLASSIFIED]
     only = sum((1 for c in classified if sum((1 for k in keys if counts[c][k])) == 1))
-    return page(request, 'categories.html', 'categories', user, heat=heat, last=last, platforms=len(keys), groups=len([g for g in groups if g['label'] != UNCLASSIFIED]), categories=len(classified), overlapping=len(classified) - only, only=only, listings=len(rows), isins=len({r['isin'] for r in rows}), unclassified=sum(counts[UNCLASSIFIED].values()), ramp=list(reversed(charts.RAMP)))
+    return page(request, 'categories.html', 'categories', user, heat=heat, last=last, platforms=len(keys), groups=len([g for g in groups if g['label'] != UNCLASSIFIED]), categories=len(classified), overlapping=len(classified) - only, only=only, listings=len(rows), isins=len({r['isin'] for r in rows}), unclassified=sum(counts[UNCLASSIFIED].values()), ramp=list(reversed(charts.RAMP)), pending=[] if auth.public_view() else cats.pending(rows))

@@ -30,5 +30,6 @@
   <p class="kv">Share = the platform's bonds in the category ÷ all platform listings in that category. A bond sold on three platforms counts once for each, so listings can be more than unique ISINs. Shares are rounded so each row adds up to exactly 100%. Platforms are ordered by listings; a paused platform shows its last snapshot.</p>
   <p class="kv">Category = issuer sector. NBFC and HFC issuers are split by their main lending segment, researched from rating rationales and issuer disclosures; government, bank, PSU and corporate issuers follow NSDL's category and business sector.{% if unclassified %} {{ unclassified }} listing{{ 's' if unclassified != 1 }} from new issuers {{ 'are' if unclassified != 1 else 'is' }} not yet classified.{% endif %}</p>
 </section>
+
 {% endif %}
 {% endblock %}

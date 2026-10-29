@@ -53,7 +53,7 @@ def page(request: Request, template: str, active: str, user: auth.User, **ctx) -
 
 def flash(request: Request, text: str, kind: str='ok') -> None:
     request.session['flash'] = {'text': text, 'kind': kind}
-HOST_VARS = ('RENDER_EXTERNAL_HOSTNAME', 'VERCEL_PROJECT_PRODUCTION_URL', 'VERCEL_URL', 'VERCEL_BRANCH_URL')
+HOST_VARS = ('VERCEL_PROJECT_PRODUCTION_URL', 'VERCEL_URL', 'VERCEL_BRANCH_URL')
 
 def allowed_hosts() -> list[str]:
     hosts = [h.strip().lower() for h in os.environ.get('BI_WEB_HOSTS', 'localhost,127.0.0.1').split(',')]

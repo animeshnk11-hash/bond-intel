@@ -37,3 +37,14 @@ class Categories:
 
     def of(self, isin: str, issuer: str | None=None, nsdl_issuer: str | None=None, nsdl_category: str | None=None) -> str | None:
         return self.bonds.get(isin) or (self.issuers.get(issuer_key(nsdl_issuer)) if nsdl_issuer else None) or (self.issuers.get(issuer_key(issuer)) if issuer else None) or NSDL_GOVT.get(nsdl_category or '') or _by_isin(isin)
+
+    def pending(self, rows: list[dict]) -> list[dict]:
+        out: dict[str, dict] = {}
+        for r in rows:
+            if self.of(r['isin'], r.get('issuer'), r.get('nsdl_issuer'), r.get('nsdl_category')):
+                continue
+            name = r.get('nsdl_issuer') or r.get('issuer') or r['isin']
+            e = out.setdefault(issuer_key(name), {'issuer': name, 'isins': set(), 'platforms': set()})
+            e['isins'].add(r['isin'])
+            e['platforms'].add(r['platform'])
+        return sorted(({**e, 'isins': sorted(e['isins']), 'platforms': sorted(e['platforms'])} for e in out.values()), key=lambda e: (-len(e['isins']), e['issuer']))

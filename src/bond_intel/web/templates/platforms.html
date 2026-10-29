@@ -10,6 +10,7 @@
   </div>
   <div class="actions">
     <span class="seg">{% for k, lbl in periods.items() %}<a class="{{ 'on' if k == period }}" href="/platforms?p={{ k }}">{{ lbl }}</a>{% endfor %}</span>
+    
   </div>
 </div>
 
@@ -63,9 +64,11 @@
   <div class="table-wrap">{{ heat | safe }}</div>
 </section>
 {% endif %}
+
 {% endblock %}
 
 {% block drawers %}
+
 {% if drawer %}
 {% set d = drawer %}{% set b = d.b %}
 <div id="platform" class="drawer wide" data-autoopen>

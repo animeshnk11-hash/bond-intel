@@ -18,5 +18,5 @@ This repository holds the public, read-only dashboard: five pages (Overview, Exc
 
 ## Run the dashboard
 
-It needs a read-only database connection: `pip install -r requirements-web.txt`, set `BI_DASHBOARD_DB_URL` and `BI_WEB_PUBLIC=1`, then
+It needs a read-only database connection: `pip install -r requirements.txt`, set `BI_DASHBOARD_DB_URL` and `BI_WEB_PUBLIC=1`, then
 `uvicorn bond_intel.web.app:create_app --factory --app-dir src --port 8501`.
