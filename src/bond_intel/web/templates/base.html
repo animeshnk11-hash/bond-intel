@@ -1,0 +1,46 @@
+{%- from "icons.html" import icon -%}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Bond Intel{% endblock %} · Bond Intel</title>
+{%- if user and user.mode == 'public' %}
+<meta name="robots" content="noindex, nofollow">
+{%- endif %}
+<link rel="stylesheet" href="/static/app.css?v=3">
+{% block head %}{% endblock %}
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><b>Bond Intel</b><span>by Blostem</span></div>
+    <nav class="nav">
+      {%- for key, href, label, ico in nav %}
+      <a href="{{ href }}" class="{{ 'on' if key == active }}">{{ icon(ico) }}{{ label }}
+        {%- if key == 'sources' and alert_count %}<span class="badge">{{ alert_count }}</span>{% endif %}</a>
+      {%- endfor %}
+    </nav>
+    <div class="worker">
+      {%- if user.mode != 'public' %}
+      <b><span class="dot {{ '' if worker.alive else 'off' }}"></span>{{ 'Worker running' if worker.alive else 'Worker not running' }}</b>
+      {%- endif %}
+      {%- if worker.next %}
+      <div>Next: {{ worker.next[1] }} {{ worker.next[0].strftime('%H:%M') }}{% if worker.next[0].date() != now.date() %} {{ worker.next[0] | dshort }}{% endif %}</div>
+      {%- endif %}
+    </div>
+    <div class="me"><i>{{ user.initials }}</i><div>{{ user.name }}<small>{{ 'Admin' if user.is_admin else 'Viewer' }}</small></div></div>
+  </aside>
+  <main>
+    {%- if flash %}<div class="banner {{ flash.kind }}">{{ flash.text }}</div>{% endif %}
+    
+    {%- if user.mode == 'public' and active == 'overview' %}<div class="banner info">Read-only view. The data updates by itself through the day.</div>{% endif %}
+    {% block main %}{% endblock %}
+  </main>
+</div>
+<div id="drawer-bg" class="drawer-bg"></div>
+{% block drawers %}{% endblock %}
+<script src="/static/app.js?v=2"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

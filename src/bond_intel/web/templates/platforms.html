@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% from "icons.html" import icon %}
+{% block title %}Platforms{% endblock %}
+{% block main %}
+<div class="head">
+  <div>
+    <h1>Platforms</h1>
+    <p>Online bond platforms side by side: catalogue, launches, speed of sale, yields and overlap{% if last %} · {{ frm | dshort }} – {{ to | dshort }}{% endif %}</p>
+  </div>
+  <div class="actions">
+    <span class="seg">{% for k, lbl in periods.items() %}<a class="{{ 'on' if k == period }}" href="/platforms?p={{ k }}">{{ lbl }}</a>{% endfor %}</span>
+  </div>
+</div>
+
+{% if not last %}
+<div class="card"><h2>No platform snapshots yet</h2><p class="sub">The benchmark fills in after the platforms' first good runs.</p></div>
+{% else %}
+<section class="card">
+  <h2>Benchmark</h2>
+  <p class="sub">One row per platform · catalogue as of each platform's last snapshot · sales from day-over-day changes · click a row for its profile</p>
+  <div class="table-wrap"><table class="t bench">
+    <thead><tr><th>Platform</th><th class="num">Bonds live</th><th class="num">Launches</th><th class="num">Sold out</th><th class="num">Sold per day</th><th class="num">Median YTM</th><th class="num">A- or better</th><th class="num">Issuers</th><th class="num">Exclusive</th><th class="num">Best-price share</th></tr></thead>
+    <tbody>
+    {% for b in bench | sort(attribute='bonds_live', reverse=True) %}
+      {% set href = '/platforms?p=' ~ period ~ '&site=' ~ b.source_key %}
+      <tr class="click {{ 'stale' if b.snap_days == 0 }}" data-href="{{ href }}">
+        <td><a class="rowlink" href="{{ href }}"><b>{{ b.platform }}</b></a>{% if b.status != 'live' %} {{ m.status_chip(b.status) }}{% endif %}
+          <small class="block">{% if b.snap_days == 0 %}no snapshot in this period · last {{ b.last_snap | dshort }}{% else %}{{ b.snap_days }} snapshot day{{ 's' if b.snap_days != 1 }}{% endif %}</small></td>
+        <td class="num"><b>{{ b.bonds_live }}</b>{% if b.bonds_listed != b.bonds_live %}<small class="block">of {{ b.bonds_listed }} listed</small>{% endif %}</td>
+        <td class="num">{{ b.launches }}</td>
+        <td class="num">{{ b.sold_out }}</td>
+        <td class="num">{% if not b.sales_published %}<span class="muted">not published</span>{% elif b.units_sold_per_day is not none %}{{ b.units_sold_per_day | num }} units{% elif b.pct_sold_per_day is not none %}{{ b.pct_sold_per_day | pct(1) }}{% else %}<span class="muted">–</span>{% endif %}</td>
+        <td class="num">{{ b.median_ytm | pct }}</td>
+        <td class="num">{{ (b.pct_a_or_better | pct(0)) if b.pct_a_or_better is not none else '–' }}</td>
+        <td class="num">{{ b.issuers }}</td>
+        <td class="num">{{ b.exclusives }}</td>
+        <td class="num">{% if b.best_price_share is not none %}<div class="minibar"><i style="width:{{ b.best_price_share }}%"></i></div>{{ b.best_price_share | pct(0) }}{% else %}–{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="kv">Launches, sold-out counts and sales compare each day's snapshot with the day before{% if pair_days == 0 %}; the first such comparison comes after the second snapshot day (snapshots start {{ first_day | day }}){% endif %}. Speed of sale needs units left or % sold on the site: BondScanner, IndiaBonds and Jiraaf do not publish either. Best-price share = the share of this platform's shared bonds where it offers the highest yield.</p>
+</section>
+
+<div class="grid g2">
+  <section class="card">
+    <h2>Catalogue by rating</h2>
+    <p class="sub">Bonds listed per platform, by rating bucket (NSDL rating, else the platform's)</p>
+    {{ mix_legend | safe }}
+    {{ mix | safe }}
+  </section>
+  <section class="card">
+    <h2>Yield gaps on shared bonds</h2>
+    <p class="sub">The {{ gaps | length }} bonds with the widest yield spread across platforms · dots are platforms, the dark dot offers the best yield</p>
+    {% if gaps %}{{ ranges | safe }}{% else %}<div class="empty">No bond is on sale on two platforms with a yield.</div>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Overlap</h2>
+  <p class="sub">How many bonds each pair of platforms both list · darker = more shared</p>
+  <div class="table-wrap">{{ heat | safe }}</div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block drawers %}
+{% if drawer %}
+{% set d = drawer %}{% set b = d.b %}
+<div id="platform" class="drawer wide" data-autoopen>
+  <header><div><h3>{{ d.name }} {{ m.status_chip(b.status) }}</h3>
+    <p class="sub">{% if web_url(d.url) %}<a href="{{ web_url(d.url) }}" target="_blank" rel="noopener noreferrer">{{ d.url }}</a> · {% elif d.url %}{{ d.url }} · {% endif %}last snapshot {{ b.last_snap | day }}{% if d.state.partial %} · partial read{% endif %}</p>
+    </div>
+    <a class="close" href="/platforms?p={{ period }}" title="Close" aria-label="Close {{ d.name }}">{{ icon('x') }}</a></header>
+  <div class="body">
+    <div class="dl">
+      <div>Bonds live</div><div>{{ b.bonds_live }} of {{ b.bonds_listed }} listed</div>
+      <div>Launches in the period</div><div>{{ b.launches }}</div>
+      <div>Sold out in the period</div><div>{{ b.sold_out }}</div>
+      <div>Median yield</div><div>{{ b.median_ytm | pct }}</div>
+      <div>Exclusive bonds</div><div>{{ d.exclusive_n }}</div>
+      <div>Best yield on shared bonds</div><div>{% if b.best_price_share is not none %}{{ b.best_price_share | pct(0) }} ({{ d.best }} of {{ d.priced }}){% else %}–{% endif %}{% if d.behind_median is not none %} · otherwise {{ '%.0f' | format(d.behind_median) }} bp behind (median){% endif %}</div>
+    </div>
+    <h4 class="section">Catalogue mix</h4>
+    {% for title, html in d.mix.items() %}<details class="mixbox" {{ 'open' if loop.first }}><summary>{{ title }}{{ icon('chev-down') }}</summary>{{ html | safe }}</details>{% endfor %}
+    <h4 class="section">Fast sellers</h4>
+    {% if d.fast %}<table class="t compact"><thead><tr><th>Bond</th><th class="num">Units sold</th><th class="num">% sold up</th></tr></thead><tbody>
+      {% for f in d.fast %}<tr><td class="bond"><b>{{ f.label }}</b><small>{{ f.isin }}</small></td><td class="num">{{ f.units_sold | num if f.units_sold else '–' }}</td><td class="num">{{ ('+' ~ ('%.1f' | format(f.pct_up)) ~ ' pts') if f.pct_up else '–' }}</td></tr>{% endfor %}
+    </tbody></table>{% else %}<p class="muted">No day-over-day sales in this period yet{{ '' if b.sales_published else ' (the site publishes neither units left nor % sold)' }}.</p>{% endif %}
+    {% if d.sold_out %}<p class="kv">Sold out: {% for s in d.sold_out %}{{ s.label }} ({{ s.days_to_sell }} days after listing){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+    <h4 class="section">Overlap with each platform</h4>
+    {% if 'meter-top' in d.overlap %}{{ d.overlap | safe }}{% else %}<p class="muted">No bond shared with another platform.</p>{% endif %}
+    <h4 class="section">Exclusive bonds <span class="muted">{{ d.exclusive_n }}, highest yield first</span></h4>
+    {% if d.exclusive %}<table class="t compact"><thead><tr><th>Bond</th><th>Rating</th><th class="num">YTM</th></tr></thead><tbody>
+      {% for r in d.exclusive %}<tr><td class="bond"><b>{{ r.label }}</b><small>{{ r.isin }}</small></td><td>{{ m.rating_chip(r.nsdl_code or r.rating_code) }}</td><td class="num">{{ r.ytm_pct | pct }}</td></tr>{% endfor %}
+    </tbody></table>{% else %}<p class="muted">Every bond here is also on another platform.</p>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

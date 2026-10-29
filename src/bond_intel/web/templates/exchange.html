@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% from "icons.html" import icon %}
+{% block title %}Exchange{% endblock %}
+{% macro hidden_controls(skip=()) -%}
+{%- for k, v in [('tab', st.tab), ('sort', st.sort), ('dir', 'desc' if st.desc else 'asc'), ('group', st.group), ('by', st.by), ('metric', st.metric), ('n', st.n)] if k not in skip %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor -%}
+{%- endmacro %}
+{% macro hidden_filters() -%}
+{%- for k, v in st.f.params() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor -%}
+{%- endmacro %}
+
+{% block main %}
+<div class="head">
+  <div>
+    <h1>Exchange</h1>
+    <p>{{ 'Bonds' if st.f.gov else 'Corporate bonds' }} traded on NSE + BSE · order book + RFQ · prices per Rs 100 face value</p>
+  </div>
+  <div class="actions">
+    <a class="btn soft filterbtn" href="{{ st.link() }}&filters=1" data-drawer="filters">{{ icon('filter') }}Filters<span class="vsep"></span><span class="wl">{{ window_label }}</span>{% if st.f.active() %}<span class="count">{{ st.f.active() }} active</span>{% endif %}{{ icon('chev-down') }}</a>
+    {% if st.window and user.mode != 'public' %}<a class="btn" href="/exchange/download.csv?{{ query }}">{{ icon('download') }}Download</a>{% endif %}
+  </div>
+</div>
+
+{% if not st.window %}
+<div class="card"><h2>No trades in this window</h2><p class="sub">Pick another period in Filters. Exchange data starts on the first loaded trading day.</p></div>
+{% else %}
+<section class="card summary">
+  <div class="stat"><div class="l">Value traded</div><div class="v">{{ value | cr_short }}</div></div>
+  <div class="stat"><div class="l">Trades</div><div class="v">{{ trades | num }}</div></div>
+  <div class="stat"><div class="l">Bonds</div><div class="v">{{ st.rows | length | num }}</div></div>
+  <div class="stat"><div class="l">Avg RFQ yield (value-weighted)</div><div class="v">{{ avg_rfq | pct }}</div></div>
+  <div class="where">
+    <div class="l">Where it traded</div>
+    <div class="splitbar">{% for x in legs if x.value > 0 %}<i class="tip-target" tabindex="0" style="width:{{ x.share | round(2) }}%;background:{{ x.color }}" data-tip='{"t": "{{ x.name }}", "r": [["Value traded", "{{ x.color }}", "{{ x.value | cr_short }} · {{ x.share | round(0) | int }}%"]]}'></i>{% endfor %}</div>
+    <div class="legend">{% for x in legs %}<span class="lg"><i class="sw" style="background:{{ x.color }}"></i>{{ x.name }} {{ x.value | cr_short }}</span>{% endfor %}</div>
+  </div>
+</section>
+
+<div class="{{ 'grid g-main' if bond else '' }}">
+<section class="card">
+  <div class="card-head">
+    <nav class="tabs inline">{% for k, lbl in tabs.items() %}<a class="{{ 'on' if k == st.tab }}" href="{{ st.link(tab=k) }}">{{ lbl }}</a>{% endfor %}</nav>
+    <div class="tools">
+    {% if st.tab == 'top' %}
+      <form class="row" method="get" action="/exchange">{{ hidden_filters() }}{{ hidden_controls(skip=('sort', 'group')) }}
+        <label class="selbox">{{ icon('sort') }}Sort by
+          <select name="sort" onchange="this.form.submit()">{% for k, v in sorts.items() %}<option value="{{ k }}" {{ 'selected' if k == st.sort }}>{{ v[0] }}</option>{% endfor %}</select></label>
+        <a class="btn sm icon-only" title="{{ 'Highest first' if st.desc else 'Lowest first' }} – click to flip" href="{{ st.link(dir='asc' if st.desc else 'desc') }}">{{ '↓' if st.desc else '↑' }}</a>
+        <label class="selbox">{{ icon('layers') }}Group by
+          <select name="group" onchange="this.form.submit()">{% for k, v in groups_opts.items() %}<option value="{{ k }}" {{ 'selected' if k == st.group }}>{{ v }}</option>{% endfor %}</select></label>
+        <noscript><button class="btn sm">Apply</button></noscript>
+      </form>
+    {% elif st.tab == 'yield' %}
+      <span class="seg"><a class="{{ 'on' if st.by == 'bucket' }}" href="{{ st.link(by='bucket') }}">By rating bucket</a><a class="{{ 'on' if st.by == 'cat' }}" href="{{ st.link(by='cat') }}">By category</a></span>
+    {% else %}
+      <span class="seg">{% for k, lbl in metrics.items() %}<a class="{{ 'on' if k == st.metric }}" href="{{ st.link(metric=k) }}">{{ lbl }}</a>{% endfor %}</span>
+    {% endif %}
+    </div>
+  </div>
+
+  {% if st.tab == 'top' %}
+  <div class="table-wrap"><table class="t">
+    <thead><tr>
+      {% for key, lbl, num in [('bond', 'Bond', False), (None, 'Rating', False), ('value', 'Value traded', False), ('trades', 'Trades', True), (None, 'Clean price range', False), ('ytm', 'YTM', True)] %}
+      <th class="{{ 'num' if num }}">{% if key %}<a class="{{ 'on' if st.sort == key }}" href="{{ st.link(sort=key, dir=('asc' if st.sort == key and st.desc else 'desc')) }}">{{ lbl }}{% if st.sort == key %} {{ '↓' if st.desc else '↑' }}{% endif %}</a>{% else %}{{ lbl }}{% endif %}</th>
+      {% endfor %}
+    </tr></thead>
+    <tbody>
+    {% for g in top.groups %}
+      {% if g.label %}
+      <tr class="group"><td colspan="6">{{ g.label }} <span class="muted">{{ g.count | num }} bonds · {{ g.value | cr_short }} · {{ g.trades | num }} trades</span>
+        {% if g.count > 3 %}<a class="right" href="{{ st.link(gshow='' if g.all else g.key) }}">{{ 'Top 3 only' if g.all else 'Show all ' ~ g.count }}</a>{% endif %}</td></tr>
+      {% endif %}
+      {% for r in g.rows %}
+      {% set href = st.link(page=top.pg, bond=r.isin | trim, gshow=st.gshow) %}
+      <tr class="click {{ 'sel' if r.isin | trim == st.bond }}" data-href="{{ href }}">
+        <td class="bond"><a class="rowlink" href="{{ href }}"><b>{{ r.label }}</b></a><small>{{ r.isin }} · {{ r.category or 'Other' }}{% if r.where %} · {{ r.where }}{% endif %}{% if st.sort == 'qty' %} · {{ r.qty | num }} units{% elif st.sort == 'maturity' %} · matures {{ r.maturity_date | day }}{% endif %}</small></td>
+        <td>{{ m.rating_chip(r.rating_code, r.rating_agency) }}</td>
+        <td><b>{{ r.value_inr | cr }}</b><div class="valbar"><i style="width:{{ share(r.value_inr, top.vmax) }}%"></i></div></td>
+        <td class="num">{{ r.trades | num }}</td>
+        <td class="rng">{% if r.low_clean is not none %}<span class="num">{{ r.low_clean | px }} – {{ r.high_clean | px }}</span>{% if r.rng %}<div class="rangebar"><i style="left:{{ r.rng[0] | round(1) }}%;width:{{ r.rng[1] | round(1) }}%"></i></div>{% endif %}{% else %}<span class="muted">{{ 'cash flows pending' if r.price_partial else '–' }}</span>{% endif %}</td>
+        <td class="num"><b>{{ r.ytm_pct | pct }}</b></td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="6" class="empty">No bonds match these filters. <a href="/exchange?tab={{ st.tab }}">Reset filters</a></td></tr>
+    {% endfor %}
+    {% if st.group == 'none' and not top.total %}
+      <tr><td colspan="6" class="empty">No bonds match these filters. <a href="/exchange?tab={{ st.tab }}">Reset filters</a></td></tr>
+    {% endif %}
+    </tbody>
+  </table></div>
+  <div class="pager">
+    {% if st.group == 'none' %}
+    <span>Showing {{ top.groups[0].rows | length }} of {{ top.total | num }} bonds{% if top.total %} · click a row for details{% endif %}</span>
+    <form class="row" method="get" action="/exchange">{{ hidden_filters() }}{{ hidden_controls(skip=('n',)) }}
+      <label class="row">Rows per page <select class="select" name="n" onchange="this.form.submit()">{% for k in page_sizes %}<option {{ 'selected' if k == st.n }}>{{ k }}</option>{% endfor %}</select></label>
+      {% if top.pg > 1 %}<a class="btn sm" href="{{ st.link(page=top.pg - 1) }}">‹</a>{% endif %}
+      <span>{{ top.pg }} / {{ top.pages }}</span>
+      {% if top.pg < top.pages %}<a class="btn sm" href="{{ st.link(page=top.pg + 1) }}">›</a>{% endif %}
+    </form>
+    {% else %}
+    <span>{{ top.groups | length }} groups · {{ top.total | num }} bonds · top 3 shown per group, sorted by {{ sorts[st.sort][0] | lower }}</span>
+    {% endif %}
+  </div>
+
+  {% elif st.tab == 'yield' %}
+  <div class="banner info">{{ icon('shield') }}<span>Thin-trade guard: only bonds with {{ yl.guard_text }} · {{ yl.qualify | num }} of {{ yl.with_yield | num }} bonds with a published yield qualify</span>
+    {% if user.is_admin %}<a class="right" href="/settings#guard">Change in Settings</a>{% endif %}</div>
+  <div class="table-wrap"><table class="t">
+    <thead><tr><th>Bond</th><th>Rating</th><th class="num">YTM ↓</th><th class="num">Value traded</th><th class="num">Trades</th><th>Seniority · security</th><th class="num">Maturity</th></tr></thead>
+    <tbody>
+    {% for g in yl.groups %}
+      <tr class="group"><td colspan="7">{{ g.label }} <span class="muted">{{ 'top 3 by yield' if g.count > 3 else ('only ' ~ g.count ~ (' bond' if g.count == 1 else ' bonds') ~ ' passed the guard') }}</span></td></tr>
+      {% for r in g.rows %}
+      {% set href = st.link(bond=r.isin | trim) %}
+      <tr class="click {{ 'sel' if r.isin | trim == st.bond }}" data-href="{{ href }}">
+        <td class="bond"><a class="rowlink" href="{{ href }}"><b>{{ r.label }}</b></a><small>{{ r.isin }} · {{ r.category or 'Other' }}</small></td>
+        <td>{{ m.rating_chip(r.rating_code, r.rating_agency) }}</td>
+        <td class="num"><b class="{{ 'hl' if loop.first }}">{{ r.ytm_pct | pct }}</b></td>
+        <td class="num">{{ r.value_inr | cr }}</td>
+        <td class="num">{{ r.trades | num }}</td>
+        <td>{% if r.seniority and r.seniority != 'Unknown' or r.security and r.security != 'Unknown' %}{{ r.seniority or 'Unknown' }} · {{ r.security or 'Unknown' }}{% else %}<span class="muted">Details loading</span>{% endif %}</td>
+        <td class="num">{{ r.maturity_date | day }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="7" class="empty">No bond with a published yield passed the thin-trade guard in this window.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="kv">Yield = the exchange-published yield (BSE RFQ weighted average, or the BSE order book). NSE order-book trades carry no yield.</p>
+
+  {% else %}
+  {% set tw = tr.trend_window %}
+  <div class="trend-head">
+    <div>
+      <h3>{{ {'value': 'Value traded', 'trades': 'Trades', 'bonds': 'Bonds traded'}[st.metric] }} per trading day</h3>
+      <p class="sub">{{ tr.days | length }} trading days · {{ tw[0] | dshort }} – {{ tw[1] | dshort }}{% if st.metric == 'value' %} · Rs crore{% endif %}{{ '' if st.f.gov else ', corporate only' }}</p>
+    </div>
+    {% if tr.stats %}
+    <div class="stat-row">
+      <div class="stat"><div class="l">Daily average</div><div class="v sm">{{ tr.vfmt(tr.stats.avg / tr.scale) }}</div></div>
+      <div class="stat"><div class="l">Busiest day</div><div class="v sm">{{ tr.vfmt(tr.stats.busiest[1] / tr.scale) }} · {{ tr.stats.busiest[0] | dshort }}</div></div>
+      <div class="stat"><div class="l">Quietest day</div><div class="v sm">{{ tr.vfmt(tr.stats.quietest[1] / tr.scale) }} · {{ tr.stats.quietest[0] | dshort }}</div></div>
+    </div>
+    {% endif %}
+  </div>
+  {% if tr.note %}<p class="kv">{{ tr.note }}</p>{% endif %}
+  {% if tr.series | length > 1 %}<div class="legend">{% for x in tr.series %}<span class="lg"><i class="sw" style="background:{{ x.color }}"></i>{{ x.name }}</span>{% endfor %}</div>{% endif %}
+  {{ tr.chart | safe }}
+  <div class="grid g2 periods">
+    {% for title, sub, rows, lbl in [('By week', 'Monday to Friday · change is in the average per trading day', tr.weeks, 'Week'), ('By month', 'Calendar months in the kept history', tr.months, 'Month')] %}
+    <div>
+      <h3>{{ title }}</h3><p class="sub">{{ sub }}</p>
+      <div class="table-wrap"><table class="t"><thead><tr><th>{{ lbl }}</th><th class="num">Days</th><th class="num">{{ {'value': 'Value traded', 'trades': 'Trades', 'bonds': 'Bond-days'}[st.metric] }}</th><th class="num">Avg / day</th><th class="num">vs prev</th></tr></thead>
+      <tbody>{% for a in rows %}
+        <tr><td><b>{{ a.label }}</b>{% for n in a.notes %}<small class="note">{{ icon('calendar') }}{{ n }}</small>{% endfor %}{% if a.to_date %}<small class="note">{{ icon('calendar') }}{{ 'week' if lbl == 'Week' else 'month' }} to date</small>{% endif %}</td>
+          <td class="num">{{ a.days }}</td><td class="num">{{ tr.vfmt(a.total / tr.scale) }}</td><td class="num"><b>{{ tr.vfmt(a.avg / tr.scale) }}</b></td>
+          <td class="num">{% if a.vs is not none %}{{ m.delta(a.vs, '') }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+      {% else %}<tr><td colspan="5" class="empty">No history yet.</td></tr>{% endfor %}</tbody></table></div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="kv">Trading days only. Value = NSE + BSE order book + BSE RFQ{{ '' if st.f.gov else ', corporate bonds (government securities hidden by the filters)' }}. Hover a bar for the split by market.</p>
+  {% endif %}
+</section>
+
+{% if bond %}
+{% set p = bond.p %}
+<aside class="card bondcard" id="bond" aria-label="Bond details">
+  <div class="card-head"><h2>{{ p.label }}</h2><a class="close" href="{{ st.link(page=st.page if st.page > 1 else None, gshow=st.gshow) }}" title="Close" aria-label="Close the bond details">{{ icon('x') }}</a></div>
+  {% if bond.missing %}
+  <div class="emptybox">{{ icon('info') }}No reference data for this ISIN yet: NSDL has not described it, or the ISIN is mistyped.</div>
+  {% else %}
+  <p class="sub">{{ p.isin }}{% if p.issuer_name %} · {{ p.issuer_name | issuer(60) }}{% endif %}</p>
+  <div class="chips">
+    {% if p.rating_code %}<span class="chip rating">{{ p.rating_agency ~ ' ' if p.rating_agency }}{{ p.rating_code }}{% if p.rating_outlook %} · {{ p.rating_outlook | title }}{% endif %}</span>{% else %}<span class="chip gray">Unrated</span>{% endif %}
+    {% if p.category %}<span class="chip gray">{{ p.category }}</span>{% endif %}
+    {% if p.seniority and p.seniority != 'Unknown' %}<span class="chip gray">{{ p.seniority }}{% if p.security and p.security != 'Unknown' %} {{ p.security | lower }}{% endif %}</span>{% endif %}
+  </div>
+  <div class="dl">
+    <div>Coupon</div><div>{{ p.coupon_pct | pct }}{% if p.coupon_freq %} · paid {{ p.coupon_freq | freq }}{% endif %}</div>
+    <div>Maturity</div><div>{{ p.maturity_date | day }}</div>
+    <div>Face value</div><div>{{ p.face_value_inr | inr }}</div>
+    <div>Staggered redemption</div><div>{{ p.staggered or 'Unknown' }}</div>
+    <div>Type</div><div>{{ p.bond_type or '–' }}</div>
+    <div>Accrued interest</div><div>{% if bond.ai is not none %}Rs {{ bond.ai | px }} per Rs 100{% else %}–{% endif %}</div>
+  </div>
+  {% endif %}
+  <h3>Traded {{ ('on ' ~ (bond.window[1] | dshort)) if bond.window[0] == bond.window[1] else ((bond.window[0] | dshort) ~ ' – ' ~ (bond.window[1] | dshort)) }}</h3>
+  {% for x in bond.legs %}
+  <div class="legtile"><div class="row"><b>{{ x.name }}</b><span class="spacer"></span><span class="muted">{{ x.value | cr }} · {{ x.trades | num }} trades</span></div>
+    <small>{% if x.segment == 'ORDER_BOOK' %}{{ x.qty | num }} units · {% endif %}{% if x.lo_c is not none %}clean {{ x.lo_c | px }} – {{ x.hi_c | px }}{% endif %}{% if x.lo_d is not none and x.segment == 'ORDER_BOOK' %} · dirty {{ x.lo_d | px }} – {{ x.hi_d | px }}{% endif %}{% if x.ytm is not none %} · YTM {{ x.ytm | pct }}{% endif %}</small></div>
+  {% else %}<p class="muted">Not traded in this window.</p>{% endfor %}
+  {% if not bond.missing or bond.total22 %}
+  <div class="row" style="margin-top:14px"><h3 style="margin:0">Value traded · last {{ bond.last22 | length }} days</h3><span class="spacer"></span><b class="hl">Rs {{ "%.1f" | format(bond.total22 / 1e7) }} cr</b></div>
+  {{ bond.spark | safe }}
+  {% if bond.last22 %}<div class="row kv"><span>{{ bond.last22[0].trade_date | dshort }}</span><span class="spacer"></span><span>{{ bond.last22[-1].trade_date | dshort }}</span></div>{% endif %}
+  {% endif %}
+</aside>
+{% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block drawers %}
+{% if st.window or true %}
+<div id="filters" class="drawer wide" {{ 'data-autoopen' if open_filters }}>
+  <header><div><h3>Filters {% if st.f.active() %}<span class="chip">{{ st.f.active() }} active</span>{% endif %}</h3>
+    <p class="sub">Applies to Top traded, Highest yield and Trend. Nothing picked in a group means all.</p></div>
+    <button class="close" data-close title="Close">{{ icon('x') }}</button></header>
+  <form id="filters-form" class="body" method="get" action="/exchange" data-count-url="/exchange/count">
+    {{ hidden_controls() }}
+    <div class="fsec">
+      <h4>Period</h4>
+      <div class="seg wrap">{% for k, lbl in windows.items() %}<label class="{{ 'on' if st.f.win == k }}"><input type="radio" name="win" value="{{ k }}" {{ 'checked' if st.f.win == k }}>{{ lbl }}</label>{% endfor %}</div>
+      <div class="row" style="margin-top:10px">
+        <label class="field grow">As of
+          <select class="input" name="asof"><option value="">Latest trading day</option>{% for d in trading_days or [] %}<option value="{{ d }}" {{ 'selected' if st.f.asof == d }}>{{ d | dow }}</option>{% endfor %}</select></label>
+      </div>
+      <div class="row custom-range" style="margin-top:10px">
+        <label class="field grow">From<input type="date" name="from" value="{{ st.f.dfrom or '' }}"></label>
+        <label class="field grow">To<input type="date" name="to" value="{{ st.f.dto or '' }}"></label>
+      </div>
+    </div>
+
+    <div class="fsec">
+      <div class="row"><h4>Saved filters</h4><span class="spacer"></span><small class="muted">Shared · saved by admins</small></div>
+      {% for sf in saved %}
+      <div class="row savedf"><a href="/exchange?{{ sf.query }}">{{ icon('bookmark') }}{{ sf.name }}</a><span class="spacer"></span>
+        {% if user.is_admin %}<button class="btn sm danger" form="del-{{ loop.index }}" type="submit">Delete</button>{% endif %}</div>
+      {% else %}
+      <div class="emptybox">{{ icon('bookmark') }}No saved filters yet.{% if user.is_admin %} Save the current filters below.{% endif %}</div>
+      {% endfor %}
+    </div>
+
+    {% set f = st.f %}{% set fc = facets or {} %}
+    {% macro pills(name, options, counts=None) -%}
+      <div class="pills">{% for val, lbl in options %}<label class="pill"><input type="checkbox" name="{{ name }}" value="{{ val }}" {{ 'checked' if val in f.lists.get(name, []) }}>{{ lbl }}{% if counts is not none %} <small>{{ counts.get(val, 0) }}</small>{% endif %}</label>{% endfor %}</div>
+    {%- endmacro %}
+    {% set n1 = (f.lists.bucket | length > 0) + (f.lists.cat | length > 0) + (f.lists.mkt | length > 0) + (f.lists.seg | length > 0) + (1 if f.gov else 0) %}
+    <details class="fsec" {{ 'open' }}>
+      <summary><h4>Rating, category & market {% if n1 %}<small>{{ n1 }} set</small>{% endif %}</h4>{{ icon('chev-down') }}</summary>
+      <div class="flabel row">Rating bucket<span class="spacer"></span><small class="muted">lowest rating when agencies differ</small></div>
+      {{ pills('bucket', opts.bucket, fc.get('bucket')) }}
+      <div class="flabel">Category</div>
+      {{ pills('cat', opts.cat, fc.get('cat')) }}
+      <label class="switch-row"><input type="checkbox" name="gov" value="1" {{ 'checked' if f.gov }}><span class="switch"></span><span><b>Include government securities</b><small>G-Sec, SDL, T-Bill and SGB · hidden by default</small></span></label>
+      <div class="grid g2" style="margin:0">
+        <div><div class="flabel">Market</div>{{ pills('mkt', [('NSE', 'NSE'), ('BSE', 'BSE')]) }}</div>
+        <div><div class="flabel">Segment</div>{{ pills('seg', [('ORDER_BOOK', 'Order book'), ('RFQ', 'RFQ')]) }}</div>
+      </div>
+    </details>
+
+    {% set n2 = (f.lists.yrs | length > 0) + (1 if f.ytm_min is not none or f.ytm_max is not none else 0) + (1 if f.cpn_min is not none or f.cpn_max is not none else 0) + (f.lists.freq | length > 0) + (1 if f.stag != 'any' else 0) %}
+    <details class="fsec" {{ 'open' if n2 }}>
+      <summary><h4>Bond terms {% if n2 %}<small>{{ n2 }} set</small>{% else %}<small class="muted">nothing set</small>{% endif %}</h4>{{ icon('chev-down') }}</summary>
+      <div class="flabel">Years to maturity</div>
+      {{ pills('yrs', opts.yrs, fc.get('yrs')) }}
+      <div class="flabel">Yield to maturity (YTM)</div>
+      <div class="row range"><label class="unit"><input type="number" step="0.01" name="ytm_min" value="{{ f.ytm_min if f.ytm_min is not none else '' }}" placeholder="Any"><i>%</i></label><span class="muted">to</span><label class="unit"><input type="number" step="0.01" name="ytm_max" value="{{ f.ytm_max if f.ytm_max is not none else '' }}" placeholder="Any"><i>%</i></label></div>
+      <p class="kv">Only bonds with an exchange-published yield can match a yield range.</p>
+      <div class="flabel">Coupon rate</div>
+      <div class="row range"><label class="unit"><input type="number" step="0.01" name="cpn_min" value="{{ f.cpn_min if f.cpn_min is not none else '' }}" placeholder="Any"><i>%</i></label><span class="muted">to</span><label class="unit"><input type="number" step="0.01" name="cpn_max" value="{{ f.cpn_max if f.cpn_max is not none else '' }}" placeholder="Any"><i>%</i></label></div>
+      <div class="flabel">Coupon frequency</div>
+      {{ pills('freq', opts.freq, fc.get('freq')) }}
+      <div class="flabel">Staggered redemption</div>
+      <div class="seg">{% for k, lbl in [('any', 'Any'), ('yes', 'Yes'), ('no', 'No')] %}<label class="{{ 'on' if f.stag == k }}"><input type="radio" name="stag" value="{{ k }}" {{ 'checked' if f.stag == k }}>{{ lbl }}</label>{% endfor %}</div>
+    </details>
+
+    {% set n3 = (f.lists.sen | length > 0) + (f.lists.sec | length > 0) + (f.lists.type | length > 0) + (f.lists.agency | length > 0) %}
+    <details class="fsec" {{ 'open' if n3 }}>
+      <summary><h4>Structure {% if n3 %}<small>{{ n3 }} set</small>{% else %}<small class="muted">nothing set</small>{% endif %}</h4>{{ icon('chev-down') }}</summary>
+      <div class="flabel">Seniority</div>{{ pills('sen', opts.sen, fc.get('sen')) }}
+      <div class="flabel">Security</div>{{ pills('sec', opts.sec, fc.get('sec')) }}
+      <div class="flabel">Bond type</div>{{ pills('type', opts.type, fc.get('type')) }}
+      <div class="flabel">Rating agency</div>{{ pills('agency', opts.agency, fc.get('agency')) }}
+    </details>
+  </form>
+  {% if user.is_admin %}
+  <form class="savebar" method="post" action="/exchange/filters/save">{{ m.csrf_field(csrf) }}<input type="hidden" name="query" value="{{ st.f.query() }}">
+    <input type="text" name="name" placeholder="Save these filters as…" aria-label="Name for the saved filter" maxlength="60" required><button class="btn sm">{{ icon('bookmark') }}Save</button></form>
+  {% for sf in saved %}<form id="del-{{ loop.index }}" method="post" action="/exchange/filters/delete" data-confirm="Delete the saved filter “{{ sf.name }}” for everyone?">{{ m.csrf_field(csrf) }}<input type="hidden" name="name" value="{{ sf.name }}"></form>{% endfor %}
+  {% endif %}
+  <footer><a class="btn" href="/exchange?tab={{ st.tab }}">Reset to default</a><span class="spacer"></span>
+    <button class="btn primary" form="filters-form" type="submit" data-count-label>Show {{ st.rows | length | num }} bonds</button></footer>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,8 @@
+* text=auto
+
+# captured responses stay byte-for-byte as the sites sent them
+tests/fixtures/** -text
+
+*.png binary
+*.zip binary
+*.xlsx binary

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% from "icons.html" import icon %}
+{% block title %}Overview{% endblock %}
+{% block main %}
+<div class="head">
+  <div>
+    <h1>Overview</h1>
+    {% if d %}<p>Corporate bonds traded on NSE + BSE (order book + RFQ) · data for {{ d | dow }}{% if loaded_at %}, loaded {{ loaded_at | when }}{% endif %}</p>{% endif %}
+  </div>
+  <div class="actions">
+    
+  </div>
+</div>
+
+{% if not d %}
+<div class="card"><h2>No exchange data yet</h2><p class="sub">The first end-of-day load fills this page. It runs on trading days at 19:15.</p></div>
+{% else %}
+{% set prev_lbl = 'vs ' ~ prev_day.strftime('%a') if prev_day else 'vs prev' %}
+<div class="grid g4">
+  {% call m.kpi('Corporate value traded', cur.value_inr | cr_short) %}{{ m.delta(delta_pct(cur.value_inr, avg5), 'vs 5d avg') }}{{ m.delta(delta_pct(cur.value_inr, cur.prev_value_inr), prev_lbl) }}{% endcall %}
+  {% call m.kpi('Trades', cur.trades | num) %}{{ m.delta(delta_pct(cur.trades, cur.prev_trades), prev_lbl) }}{% endcall %}
+  {% call m.kpi('Bonds traded', cur.isins | num) %}<span class="chip gray">NSE {{ by_exchange.get('NSE', 0) | num }} · BSE {{ by_exchange.get('BSE', 0) | num }}{% if both %} · {{ both | num }} on both{% endif %}</span>{% endcall %}
+  {% if most %}
+  {% call m.kpi('Most traded', most.label, small=True) %}<span class="chip gray">{{ most.value_inr | cr_short }} · {{ rating(most.rating_code, most.rating_agency) }}</span>{% endcall %}
+  {% else %}{% call m.kpi('Most traded', '–') %}{% endcall %}{% endif %}
+</div>
+
+<div class="grid g-main">
+  <section class="card">
+    <h2>Corporate value traded · last {{ days | length }} trading days</h2>
+    <p class="sub">Rs crore per day · {{ days[0].trade_date | dshort }} to {{ days[-1].trade_date | dshort }} · order book + RFQ · NSE + BSE</p>
+    {{ chart | safe }}
+    <div class="foot">
+      <span>Latest {{ cur.value_inr | cr_short }} ({{ d | dshort }}) · 5-day average {{ avg5 | cr_short }}</span>
+      {% if peak %}<span>{{ days | length }}-day peak {{ peak.value_inr | cr_short }} on {{ peak.trade_date | dshort }}</span>{% endif %}
+    </div>
+  </section>
+  <section class="card">
+    <h2>Where the money went</h2>
+    <p class="sub">Value traded by rating bucket · {{ d | dshort }}</p>
+    {{ money | safe }}
+  </section>
+</div>
+
+<div class="grid g-main">
+  <section class="card">
+    <div class="card-head">
+      <h2>Top traded bonds</h2>
+      <form class="tools" method="get" action="/">
+        <input type="hidden" name="win" value="{{ win }}">
+        <label class="selbox">{{ icon('sort') }}Sort by
+          <select name="sort" onchange="this.form.submit()">{% for k, lbl in sorts.items() %}<option value="{{ k }}" {{ 'selected' if k == sort }}>{{ lbl }}</option>{% endfor %}</select></label>
+        <label class="selbox">{{ icon('layers') }}Group by
+          <select name="group" onchange="this.form.submit()">{% for k, lbl in group_opts.items() %}<option value="{{ k }}" {{ 'selected' if k == group }}>{{ lbl }}</option>{% endfor %}</select></label>
+        <span class="seg">{% for k, lbl in windows.items() %}<a class="{{ 'on' if k == win }}" href="/?win={{ k }}&sort={{ sort }}&group={{ group }}">{{ lbl }}</a>{% endfor %}</span>
+        <noscript><button class="btn sm">Apply</button></noscript>
+      </form>
+    </div>
+    <div class="table-wrap"><table class="t">
+      <thead><tr><th>#</th><th>Bond</th><th>Rating</th><th>Value traded</th><th class="num">Trades</th><th class="num">YTM</th></tr></thead>
+      <tbody>
+      {% for g in groups %}
+        {% if g.label %}<tr class="group"><td colspan="6">{{ g.label }} <span class="muted">· {{ g.count }} bonds · {{ g.value | cr_short }} · {{ g.trades | num }} trades</span></td></tr>{% endif %}
+        {% for r in g.rows %}
+        {% set href = '/exchange?win=' ~ win ~ '&bond=' ~ (r.isin | trim) %}
+        <tr class="click" data-href="{{ href }}">
+          <td><span class="rank {{ 'first' if loop.first and not g.label }}">{{ loop.index }}</span></td>
+          <td class="bond"><a class="rowlink" href="{{ href }}"><b>{{ r.label }}</b></a><small>{{ r.isin }} · {{ r.category or 'Other' }}{% if r.where %} · {{ r.where }}{% endif %}{% if sort == 'qty' %} · {{ r.qty | num }} units{% endif %}</small></td>
+          <td>{{ m.rating_chip(r.rating_code, r.rating_agency) }}</td>
+          <td><b>{{ r.value_inr | cr }}</b><div class="valbar"><i style="width:{{ share(r.value_inr, vmax) }}%"></i></div></td>
+          <td class="num">{{ r.trades | num }}</td>
+          <td class="num"><b>{{ r.ytm_pct | pct }}</b></td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="6" class="empty">No corporate bonds traded in this window.</td></tr>
+      {% endfor %}
+      {% if group == 'none' and not card_count %}
+        <tr><td colspan="6" class="empty">No corporate bonds traded in this window.</td></tr>
+      {% endif %}
+      </tbody>
+    </table></div>
+    <div class="pager"><a href="/exchange?win={{ win }}&sort={{ sort }}&group={{ group }}">See all {{ card_count | num }} bonds in Exchange {{ icon('arrow-right') }}</a>
+      <span>{% if all_groups > groups | length %}{{ groups | length }} of {{ all_groups }} groups{% if window[0] != window[1] %} · {% endif %}{% endif %}{% if window[0] != window[1] %}{{ window[0] | dshort }} – {{ window[1] | dshort }}{% endif %}</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Highest yield by rating</h2>
+    <p class="sub">Top bond per bucket · {{ guard_text }} · {{ d | dshort }}</p>
+    {% for bucket, r in best %}
+    <a class="ytile" href="/exchange?tab=yield&bond={{ r.isin }}">
+      <span class="b">{{ bucket }}</span>
+      <span class="n">{{ r.label }}</span>
+      <span class="r">{{ rating(r.rating_code, r.rating_agency) }}</span>
+      <span class="y">{{ r.ytm_pct | pct }}</span>
+    </a>
+    {% else %}
+    <div class="empty">No bond passed the thin-trade guard today.</div>
+    {% endfor %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% from "icons.html" import icon %}
+{% block title %}OBPP listings{% endblock %}
+{% macro hidden_filters() -%}
+{%- for k, v in st.filters() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor -%}
+{%- endmacro %}
+
+{% block main %}
+<div class="head">
+  <div>
+    <h1>OBPP listings</h1>
+    <p>Bonds on offer on online bond platforms · one row per bond · open a row to compare platforms</p>
+  </div>
+  <div class="actions">
+    {% if st.day %}
+    <a class="btn soft filterbtn" href="{{ st.link() }}&filters=1" data-drawer="filters">{{ icon('filter') }}Filters<span class="vsep"></span><span class="wl">Snapshot {{ st.day | dshort }}{% if runs and runs.at %}, {{ runs.at.strftime('%H:%M') }}{% endif %}</span>{% if st.active() %}<span class="count">{{ st.active() }} active</span>{% endif %}{{ icon('chev-down') }}</a>
+    {% if user.mode != 'public' %}<a class="btn" href="/obpp/download.csv?{{ query }}">{{ icon('download') }}Download</a>{% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if not st.day %}
+<div class="card"><h2>No platform snapshots yet</h2><p class="sub">Each Live platform is read at 10:00 and 16:00; its listings appear here after the first good run.</p></div>
+{% else %}
+<section class="card summary">
+  <div class="stat"><div class="l">Bonds on offer</div><div class="v">{{ rows | length | num }}</div></div>
+  <div class="stat"><div class="l">Listings</div><div class="v">{{ listings | num }}</div></div>
+  <div class="stat"><div class="l">On 2+ platforms</div><div class="v">{{ multi | num }}</div></div>
+  <div class="stat"><div class="l">Median best YTM</div><div class="v">{{ median | pct }}</div></div>
+  <div class="where">
+    <div class="l">Listings per platform{{ '' if st.gov else ' (corporate)' }}{% if per_platform | selectattr(2) | list %} · * partial read{% endif %}</div>
+    <div class="perplat">{% for name, n, partial in per_platform %}<span><a href="{{ '/obpp?' ~ ([('plat', name)] | urlencode) }}">{{ name }}</a> <b>{{ n }}{{ '*' if partial }}</b></span>{% endfor %}</div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <nav class="tabs inline">{% for k, lbl in tabs.items() %}<a class="{{ 'on' if k == st.tab }}" href="{{ st.link(tab=k) }}">{{ lbl }}</a>{% endfor %}</nav>
+    {% if st.tab == 'listings' %}
+    <form class="tools" method="get" action="/obpp">{{ hidden_filters() }}<input type="hidden" name="dir" value="{{ 'desc' if st.desc else 'asc' }}"><input type="hidden" name="n" value="{{ st.n }}">
+      <label class="selbox">{{ icon('sort') }}Sort by
+        <select name="sort" onchange="this.form.submit()">{% for k, v in sorts.items() %}<option value="{{ k }}" {{ 'selected' if k == st.sort }}>{{ v }}</option>{% endfor %}</select></label>
+      <a class="btn sm icon-only" title="{{ 'Highest first' if st.desc else 'Lowest first' }} – click to flip" href="{{ st.link(dir='asc' if st.desc else 'desc') }}">{{ '↓' if st.desc else '↑' }}</a>
+      <label class="selbox">{{ icon('layers') }}Group by
+        <select name="group" onchange="this.form.submit()">{% for k, v in groups_opts.items() %}<option value="{{ k }}" {{ 'selected' if k == st.group }}>{{ v }}</option>{% endfor %}</select></label>
+      <noscript><button class="btn sm">Apply</button></noscript>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if st.tab == 'listings' %}
+  <div class="table-wrap"><table class="t listings">
+    <thead><tr><th></th><th>Bond</th><th>Rating</th><th class="num">Best YTM</th><th class="num">YTM gap</th><th class="num">Platforms</th><th class="num">Min. investment</th><th class="num">Maturity</th></tr></thead>
+    <tbody>
+    {% for g in ls.groups %}
+      {% if g.label %}<tr class="group"><td colspan="8">{{ g.label }} <span class="muted">{{ g.count }} bonds{% if g.count > 5 and not g.all %} · top 5 shown{% endif %}</span>
+        {% if g.count > 5 %}<a class="right" href="{{ st.link(gshow='' if g.all else g.key) }}">{{ 'Top 5 only' if g.all else 'Show all ' ~ g.count }}</a>{% endif %}</td></tr>{% endif %}
+      {% for r in g.rows %}
+      {% set rid = 'cmp-' ~ r.isin %}
+      <tr class="click {{ 'sel' if r.isin == st.open }}" data-toggle="{{ rid }}">
+        <td class="chev"><button type="button" class="chevbtn" aria-expanded="{{ 'true' if r.isin == st.open else 'false' }}" aria-controls="{{ rid }}" aria-label="Compare platforms for {{ r.label }}">{{ icon('chev-right') }}</button></td>
+        <td class="bond"><b>{{ r.label }}</b><small>{{ r.isin }}{% if r.coupon_freq %} · {{ r.coupon_freq | freq }} coupon{% endif %}</small></td>
+        <td>{{ m.rating_chip(r.rating_code, r.rating_agency) }}</td>
+        <td class="num"><b>{{ r.best_ytm | pct }}</b><small class="block">{% if r.best_on %}{% if r.best_on | length == r.platforms and r.platforms > 1 %}all {{ r.platforms }} platforms{% elif r.best_on | length > 1 %}{{ r.best_on[0] }} +{{ r.best_on | length - 1 }} more{% else %}{{ r.best_on[0] }}{% endif %}{% endif %}</small></td>
+        <td class="num">{% if r.platforms > 1 and r.ytm_gap_pct is not none %}{{ r.ytm_gap_pct | bp }}{% else %}<span class="muted">–</span>{% endif %}</td>
+        <td class="num">{{ r.platforms }}{% if r.sold_out %}<small class="block bad">{{ r.sold_out }} sold out</small>{% endif %}</td>
+        <td class="num">{{ r.min_investment_inr | inr }}</td>
+        <td class="num">{{ r.maturity_date | day }}</td>
+      </tr>
+      <tr id="{{ rid }}" class="expand {{ '' if r.isin == st.open else 'hidden' }}"><td></td><td colspan="7">
+        <div class="inner">
+          <div class="row"><b>Compare platforms</b><span class="spacer"></span><small class="muted">— means that platform does not show it</small></div>
+          <table class="t compact">
+            <thead><tr><th>Platform</th><th class="num">YTM</th><th class="num">Clean price</th><th class="num">Units left</th><th class="num">Sold</th><th class="num">Min. investment</th><th>Status</th><th class="num">Listed since</th></tr></thead>
+            <tbody>{% for c in r.compare %}
+              <tr><td>{{ c.platform }}{% if c.best %} <span class="chip">best yield</span>{% endif %}</td>
+                <td class="num"><b>{{ c.ytm_pct | pct }}</b></td>
+                <td class="num">{{ c.clean_price_100 | px if c.clean_price_100 is not none else '—' }}</td>
+                <td class="num">{{ c.units_available | num if c.units_available is not none else '—' }}</td>
+                <td class="num">{{ (c.pct_sold | pct(0)) if c.pct_sold is not none else '—' }}</td>
+                <td class="num">{{ c.min_investment_inr | inr if c.min_investment_inr is not none else '—' }}</td>
+                <td>{% if c.status == 'unknown' %}<span class="muted">—</span>{% else %}{{ m.status_chip(c.status) }}{% endif %}</td>
+                <td class="num">{{ c.first_seen_on | dshort }}</td></tr>
+            {% endfor %}</tbody>
+          </table>
+        </div>
+      </td></tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="8" class="empty">No bonds match these filters. <a href="/obpp?tab={{ st.tab }}">Reset filters</a></td></tr>
+    {% endfor %}
+    {% if st.group == 'none' and not ls.total %}
+      <tr><td colspan="8" class="empty">No bonds match these filters. <a href="/obpp?tab={{ st.tab }}">Reset filters</a></td></tr>
+    {% endif %}
+    </tbody>
+  </table></div>
+  <div class="pager">
+    {% if st.group == 'none' %}
+    <span>Showing {{ ls.groups[0].rows | length }} of {{ ls.total | num }} bonds{% if ls.total %} · {{ multi | num }} are on 2 or more platforms · click a row to compare platforms{% endif %}</span>
+    <form class="row" method="get" action="/obpp">{{ hidden_filters() }}<input type="hidden" name="sort" value="{{ st.sort }}"><input type="hidden" name="dir" value="{{ 'desc' if st.desc else 'asc' }}">
+      <label class="row">Rows per page <select class="select" name="n" onchange="this.form.submit()">{% for k in page_sizes %}<option {{ 'selected' if k == st.n }}>{{ k }}</option>{% endfor %}</select></label>
+      {% if ls.pg > 1 %}<a class="btn sm" href="{{ st.link(page=ls.pg - 1) }}">‹</a>{% endif %}
+      <span>{{ ls.pg }} / {{ ls.pages }}</span>
+      {% if ls.pg < ls.pages %}<a class="btn sm" href="{{ st.link(page=ls.pg + 1) }}">›</a>{% endif %}
+    </form>
+    {% else %}
+    <span>{{ ls.groups | length }} groups · {{ ls.total | num }} bonds · top 5 shown per group</span>
+    {% endif %}
+  </div>
+
+  {% else %}
+  {% if ch.compared == 0 %}
+  <div class="emptybox big">{{ icon('info') }}<div><b>No changes to show for {{ st.day | day }}.</b><br>Changes compare each platform's snapshot with its previous one. The platforms' first snapshots are on {{ st.days[-1] | day }}; the first comparison appears after their next good run on a later day.</div></div>
+  {% else %}
+  <div class="chips-row">
+    {% for s in ch.sections %}<a class="chip {{ 'gray' if not s.rows }}" href="#ch-{{ s.key }}">{{ s.title }} {{ s.rows | length }}</a>{% endfor %}
+    <span class="chip gray">Units sold {{ ch.units | num }} · {{ ch.inr | cr_short }}</span>
+    <span class="chip gray">Yield moves {{ ch.moves | length }}</span>
+  </div>
+  {% if ch.relearned %}<div class="banner info">{{ icon('info') }}<span>{{ ch.relearned | join(', ') }} {{ 'was' if ch.relearned | length == 1 else 'were' }} learned again since {{ 'its' if ch.relearned | length == 1 else 'their' }} previous snapshot, so only new and removed bonds are compared there.</span></div>{% endif %}
+  <div class="grid g2 changes">
+    {% for s in ch.sections %}
+    <div id="ch-{{ s.key }}">
+      <h3>{{ s.title }} <span class="muted">{{ s.rows | length }}</span></h3>
+      {% if s.rows %}<table class="t compact"><thead><tr><th>Platform</th><th>Bond</th><th>Status</th></tr></thead><tbody>
+        {% for r in s.rows[:15] %}<tr><td>{{ r.platform }}</td><td class="bond"><b>{{ r.label }}</b><small>{{ r.isin }}</small></td><td>{{ m.status_chip(r.status or r.prev_status) }}</td></tr>{% endfor %}
+      </tbody></table>{% if s.rows | length > 15 %}<p class="kv">+ {{ s.rows | length - 15 }} more in the download</p>{% endif %}
+      {% else %}<p class="muted">None today.</p>{% endif %}
+    </div>
+    {% endfor %}
+    <div>
+      <h3>Fast sellers <span class="muted">units sold since the previous snapshot</span></h3>
+      {% if ch.sold %}<table class="t compact"><thead><tr><th>Platform</th><th>Bond</th><th class="num">Units</th><th class="num">Value</th></tr></thead><tbody>
+        {% for r in ch.sold %}<tr><td>{{ r.platform }}</td><td class="bond"><b>{{ r.label }}</b><small>{{ r.isin }}</small></td><td class="num">{{ r.units_sold | num }}</td><td class="num">{{ r.inr_sold | cr_short }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}<p class="muted">No drops in units left today.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Yield moves <span class="muted">5 bp or more</span></h3>
+      {% if ch.moves %}<table class="t compact"><thead><tr><th>Platform</th><th>Bond</th><th class="num">YTM change</th><th class="num">Price change</th></tr></thead><tbody>
+        {% for r in ch.moves %}<tr><td>{{ r.platform }}</td><td class="bond"><b>{{ r.label }}</b><small>{{ r.isin }}</small></td><td class="num">{{ '%+.0f' | format(r.ytm_delta * 100) }} bp</td><td class="num">{{ '%+.2f' | format(r.price_delta) if r.price_delta is not none else '—' }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}<p class="muted">No yield moved by 5 bp or more.</p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block drawers %}
+{% if st.day %}
+<div id="filters" class="drawer wide" {{ 'data-autoopen' if open_filters }}>
+  <header><div><h3>Filters {% if st.active() %}<span class="chip count">{{ st.active() }} active</span>{% endif %}</h3>
+    <p class="sub">Applies to Listings and Changes. Nothing picked in a group means all.</p></div>
+    <button class="close" data-close title="Close">{{ icon('x') }}</button></header>
+  <form id="filters-form" class="body" method="get" action="/obpp">
+    <input type="hidden" name="tab" value="{{ st.tab }}"><input type="hidden" name="sort" value="{{ st.sort }}"><input type="hidden" name="group" value="{{ st.group }}"><input type="hidden" name="dir" value="{{ 'desc' if st.desc else 'asc' }}"><input type="hidden" name="n" value="{{ st.n }}">
+    {% macro pills(name, options, counts=None) -%}
+      <div class="pills">{% for val, lbl in options %}<label class="pill"><input type="checkbox" name="{{ name }}" value="{{ val }}" {{ 'checked' if val in st.lists.get(name, []) }}>{{ lbl }}{% if counts is not none %} <small>{{ counts.get(val, 0) }}</small>{% endif %}</label>{% endfor %}</div>
+    {%- endmacro %}
+    <div class="fsec">
+      <h4>Snapshot</h4>
+      <label class="field">Day (each platform's last good run of that day)
+        <select class="input" name="d">{% for d in st.days %}<option value="{{ d }}" {{ 'selected' if d == st.day }}>{{ d | dow }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="fsec"><h4>Platforms</h4>{{ pills('plat', opts.plat, facets.plat) }}</div>
+    <div class="fsec">
+      <h4>Rating bucket</h4>{{ pills('bucket', opts.bucket, facets.bucket) }}
+      <label class="switch-row"><input type="checkbox" name="gov" value="1" {{ 'checked' if st.gov }}><span class="switch"></span><span><b>Include government securities</b><small>G-Sec, SDL, T-Bill and SGB · hidden by default</small></span></label>
+    </div>
+    <div class="fsec"><h4>Years to maturity</h4>{{ pills('yrs', opts.yrs, facets.yrs) }}</div>
+    <div class="fsec"><h4>Coupon frequency</h4>{{ pills('freq', opts.freq, facets.freq) }}</div>
+  </form>
+  <footer><a class="btn" href="/obpp?tab={{ st.tab }}">Reset to default</a><span class="spacer"></span>
+    <button class="btn primary" form="filters-form" type="submit">Show bonds</button></footer>
+</div>
+{% endif %}
+{% endblock %}

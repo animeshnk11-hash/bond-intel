@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Category share{% endblock %}
+{% block main %}
+<div class="head">
+  <div>
+    <h1>Category share</h1>
+    <p>Issuer categories across the online bond platforms: each platform's share of a category's listings{% if last %} · latest snapshots, {{ last | dshort }}{% endif %}</p>
+  </div>
+</div>
+
+{% if not heat %}
+<div class="card"><h2>No platform snapshots yet</h2><p class="sub">The shares fill in after the platforms' first good runs.</p></div>
+{% else %}
+<div class="grid g4">
+  {% call m.kpi('Issuer categories', categories | num) %}<span class="chip gray">in {{ groups }} groups · NBFCs by lending segment</span>{% endcall %}
+  {% call m.kpi('On 2+ platforms', overlapping | num) %}<span class="chip gray">overlapping categories</span>{% endcall %}
+  {% call m.kpi('On one platform only', only | num) %}<span class="chip gray">unique categories</span>{% endcall %}
+  {% call m.kpi('Listings', listings | num) %}<span class="chip gray">{{ isins | num }} unique ISINs · {{ platforms }} platforms</span>{% endcall %}
+</div>
+
+<section class="card">
+  <h2>Share of each category by platform</h2>
+  <p class="sub">One row per group of categories · click a group to see its categories · each row adds up to 100% · darker = larger share within the row · bond count under each share</p>
+  <div class="legend">
+    <span class="lg"><i class="sw zero"></i>Not listed</span>
+    <span class="lg">Smaller share<span class="ramp">{% for c in ramp %}<i style="background:{{ c }}"></i>{% endfor %}</span>Larger share (within the row)</span>
+  </div>
+  <div class="table-wrap">{{ heat | safe }}</div>
+  <p class="kv">Share = the platform's bonds in the category ÷ all platform listings in that category. A bond sold on three platforms counts once for each, so listings can be more than unique ISINs. Shares are rounded so each row adds up to exactly 100%. Platforms are ordered by listings; a paused platform shows its last snapshot.</p>
+  <p class="kv">Category = issuer sector. NBFC and HFC issuers are split by their main lending segment, researched from rating rationales and issuer disclosures; government, bank, PSU and corporate issuers follow NSDL's category and business sector.{% if unclassified %} {{ unclassified }} listing{{ 's' if unclassified != 1 }} from new issuers {{ 'are' if unclassified != 1 else 'is' }} not yet classified.{% endif %}</p>
+</section>
+{% endif %}
+{% endblock %}
