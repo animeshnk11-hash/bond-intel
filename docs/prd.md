@@ -61,7 +61,7 @@ Requirements:
 | Overview | The last trading day against the day before and the 5-day average; 22 days of value traded; value by rating bucket; top traded bonds; highest yield per bucket |
 | Exchange | Every bond traded over a period: Top traded (sort, group, details), Highest yield (with a thin-trade guard), Trend by day, week and month. Filters for period, rating, category, market, terms and structure; CSV download; saved filters |
 | OBPP listings | One row per bond on offer across platforms, opening to a comparison. Changes: new, removed, sold out, back on sale, units sold, yield moves |
-| Platforms | The benchmark: catalogue, launches, speed of sale, median yield, A- or better share, issuers, exclusives, best-price share; rating mix, yield gaps on shared bonds, overlap; a profile per platform |
+| Platforms | The benchmark: catalogue, launches, speed of sale, median yield, A- or better share, issuers, exclusives, best-price share; rating mix, yield gaps on shared bonds, overlap; which platforms offer AMO and selling; a profile per platform |
 | Category share | Each issuer category's listings split by platform, grouped, with categories only one platform has called out |
 | Sources (admins) | Health of every source and task, alerts, the queue; per platform: run, re-learn, accept a new shape, go live, pause, add; **Scrape now** (all Live platforms or one) and the extra reads |
 | Daily report | Schedule, blocks, live preview, chat spaces, history |

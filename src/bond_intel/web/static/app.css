@@ -110,6 +110,13 @@ main { flex: 1; min-width: 0; padding: 26px 26px 40px; }
 .chip.good { background: var(--good-bg); color: var(--good); }
 .chip.bad { background: var(--bad-bg); color: var(--bad); }
 .chip.warn { background: var(--warn-bg); color: var(--warn); }
+.tick { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; flex: none; }
+.tick.good { background: var(--good); color: #fff; }
+.tick.warn { background: #F2B705; color: #3D2C00; }   /* a yellow that reads as yellow; the dark tick is 8:1 on it */
+.tick.bad { background: var(--bad); color: #fff; }
+a.tick:hover { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text-2); }
+.mark-note { display: inline-flex; align-items: center; gap: 8px; }
+.mark-note small { color: var(--muted); font-size: 12px; }
 .chip.gray { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); font-weight: 500; }
 .chip.rating { font-weight: 700; letter-spacing: 0.2px; }
 .stat-row { display: flex; gap: 34px; flex-wrap: wrap; align-items: flex-end; }
@@ -442,6 +449,7 @@ tr.muted-row td { color: var(--muted); }
 .drawer-actions .btn.sm { height: 32px; }
 .drawer-actions-link { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 12.5px; }
 .drawer-actions-link svg { width: 14px; height: 14px; }
+.link-edit { font-weight: 600; }
 /* "Being added or stopped": the row's buttons side by side, right-aligned */
 #being-added td.num { white-space: nowrap; }
 #being-added td.num > * { vertical-align: middle; }

@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% import "macros.html" as m %}
 {% from "icons.html" import icon %}
+{% macro mark(kind, shape, label, source) -%}
+{%- if source and web_url(source) %}<a class="tick {{ kind }}" href="{{ web_url(source) }}" target="_blank" rel="noopener noreferrer" title="{{ label }}: open the source" aria-label="{{ label }}: open the source">{{ icon(shape) }}</a>
+{%- else %}<span class="tick {{ kind }}" role="img" title="{{ label }}" aria-label="{{ label }}">{{ icon(shape) }}</span>{% endif -%}
+{%- endmacro %}
 {% block title %}Platforms{% endblock %}
 {% block main %}
 <div class="head">
@@ -43,6 +47,26 @@
   </table></div>
   <p class="kv">Launches, sold-out counts and sales compare each day's snapshot with the day before{% if pair_days == 0 %}; the first such comparison comes after the second snapshot day (snapshots start {{ first_day | day }}){% endif %}. Speed of sale needs units left or % sold on the site: BondScanner, IndiaBonds and Jiraaf do not publish either. Best-price share = the share of this platform's shared bonds where it offers the highest yield.</p>
 </section>
+
+{% if features %}
+<section class="card">
+  <h2>Customer features</h2>
+  <p class="sub">After-market orders (AMO) and selling before maturity · from each platform's public pages and app listings, not logged-in accounts · checked {{ features.checked_on | day }} · open a mark for its source</p>
+  <div class="table-wrap"><table class="t features">
+    <thead><tr><th>Platform</th><th>AMO</th><th>Sell</th></tr></thead>
+    <tbody>
+    {% for f in features.rows %}
+      <tr>
+        <td><b>{{ f.name }}</b>{% if f.status != 'live' %} {{ m.status_chip(f.status) }}{% endif %}</td>
+        <td>{% if not f.amo %}<span class="muted">Not checked</span>{% elif f.amo.value %}{{ mark('good', 'check', 'Yes, takes after-market orders', f.amo.source) }}{% else %}{{ mark('bad', 'x', 'No after-market orders on its public pages', none) }}{% endif %}</td>
+        <td>{% if not f.sell %}<span class="muted">Not checked</span>{% else %}{% set kind, shape, label = {'anytime': ('good', 'check', 'Yes, Sell Anytime'), 'limited': ('warn', 'check', 'Yes, with a limit'), 'none': ('bad', 'x', 'No sell route on the platform')}[f.sell.state] %}<span class="mark-note">{{ mark(kind, shape, label, f.sell.source) }}<small>{% if f.sell.state == 'anytime' %}<b>Sell Anytime</b>{% if f.sell.note %} · {% endif %}{% endif %}{{ f.sell.note }}</small></span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="kv">AMO: tick = takes orders outside market hours; cross = no public page says so. Sell: green tick = Sell Anytime; yellow tick = a sell route exists but not Sell Anytime; cross = no sell route on the platform.</p>
+</section>
+{% endif %}
 
 <div class="grid g2">
   <section class="card">
@@ -101,4 +125,5 @@
   </div>
 </div>
 {% endif %}
+
 {% endblock %}

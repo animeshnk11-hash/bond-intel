@@ -13,7 +13,7 @@ def next_run(task: dict, hol: set[date] | None=None, now: datetime | None=None) 
         return None
     hol = holidays() if hol is None else hol
     return next_slot(list(task['times_local']), task['day_rule'], now or datetime.now(IST), lambda d: d in hol)
-NEXT_OF_SQL = "SELECT status, times_local, day_rule FROM ops.task WHERE job_type = :j AND status = 'live'"
+NEXT_OF_SQL = "SELECT status, times_local, day_rule FROM ops.v_task WHERE job_type = :j AND status = 'live'"
 
 def next_of(job_type: str) -> datetime | None:
     hol = holidays()

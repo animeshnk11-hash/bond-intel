@@ -8,7 +8,7 @@ from bond_intel.web.app import LAYOUT_Q, page
 from bond_intel.web.logos import logos
 router = APIRouter()
 UNCLASSIFIED = 'Not yet classified'
-LISTINGS_SQL = "\nSELECT t.task_key, t.name AS platform, t.status, l.snap_date, l.isin, l.issuer, i.issuer_name AS nsdl_issuer,\n       i.category AS nsdl_category\n  FROM ops.task t\n  JOIN LATERAL (SELECT max(x.snap_date) AS d FROM obpp.listing_daily x WHERE x.source_key = t.task_key) m ON true\n  JOIN obpp.listing_daily l ON l.source_key = t.task_key AND l.snap_date = m.d\n  LEFT JOIN ref.instrument i ON i.isin = l.isin::bpchar\n WHERE t.kind = 'obpp_site' AND t.status IN ('live', 'paused')\n"
+LISTINGS_SQL = "\nSELECT t.task_key, t.name AS platform, t.status, l.snap_date, l.isin, l.issuer, i.issuer_name AS nsdl_issuer,\n       i.category AS nsdl_category\n  FROM ops.v_task t\n  JOIN LATERAL (SELECT max(x.snap_date) AS d FROM obpp.listing_daily x WHERE x.source_key = t.task_key) m ON true\n  JOIN obpp.listing_daily l ON l.source_key = t.task_key AND l.snap_date = m.d\n  LEFT JOIN ref.instrument i ON i.isin = l.isin::bpchar\n WHERE t.kind = 'obpp_site' AND t.status IN ('live', 'paused')\n"
 
 def load() -> dict | None:
     rows = db.rows(LISTINGS_SQL)

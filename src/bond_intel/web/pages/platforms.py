@@ -10,11 +10,12 @@ from bond_intel.web.app import page
 router = APIRouter()
 PERIODS = {7: '7 days', 30: '30 days', 90: '90 days'}
 BUCKET_COLORS = {'AAA': charts.ORDINAL[0], 'AA': charts.ORDINAL[1], 'A': charts.ORDINAL[2], 'BBB': charts.ORDINAL[3], 'BELOW_BBB': charts.ORDINAL[4], 'SOVEREIGN': '#9AA0B4'}
-LATEST_SQL = "\nSELECT t.task_key, t.name AS platform, l.isin, l.issuer, l.rating_code, l.ytm_pct, l.min_investment_inr,\n       l.maturity_date, l.coupon_pct, l.status, l.first_seen_on, l.units_available, l.pct_sold,\n       l.status IN ('live', 'unknown') AS buyable, mkt.is_sovereign(l.isin) AS sovereign,\n       i.rating_code AS nsdl_code, coalesce(i.category, l.category) AS category\n  FROM ops.task t\n  JOIN LATERAL (SELECT max(x.snap_date) AS d FROM obpp.listing_daily x\n                 WHERE x.source_key = t.task_key AND x.snap_date <= :t) m ON true\n  JOIN obpp.listing_daily l ON l.source_key = t.task_key AND l.snap_date = m.d\n  LEFT JOIN ref.instrument i ON i.isin = l.isin::bpchar\n WHERE t.kind = 'obpp_site' AND t.status IN ('live', 'paused')\n"
+LATEST_SQL = "\nSELECT t.task_key, t.name AS platform, l.isin, l.issuer, l.rating_code, l.ytm_pct, l.min_investment_inr,\n       l.maturity_date, l.coupon_pct, l.status, l.first_seen_on, l.units_available, l.pct_sold,\n       l.status IN ('live', 'unknown') AS buyable, mkt.is_sovereign(l.isin) AS sovereign,\n       i.rating_code AS nsdl_code, coalesce(i.category, l.category) AS category\n  FROM ops.v_task t\n  JOIN LATERAL (SELECT max(x.snap_date) AS d FROM obpp.listing_daily x\n                 WHERE x.source_key = t.task_key AND x.snap_date <= :t) m ON true\n  JOIN obpp.listing_daily l ON l.source_key = t.task_key AND l.snap_date = m.d\n  LEFT JOIN ref.instrument i ON i.isin = l.isin::bpchar\n WHERE t.kind = 'obpp_site' AND t.status IN ('live', 'paused')\n"
 MOVES_SQL = "\nWITH s AS (\n    SELECT l.source_key, l.isin, l.snap_date, l.job_id, l.units_available, l.pct_sold, l.status, l.first_seen_on,\n           l.issuer, l.coupon_pct, l.maturity_date,\n           lag(l.units_available) OVER w AS prev_units, lag(l.pct_sold) OVER w AS prev_pct,\n           lag(l.status) OVER w AS prev_status, lag(l.snap_date) OVER w AS prev_date, lag(l.job_id) OVER w AS prev_job\n      FROM obpp.listing_daily l\n     WHERE l.source_key = :k AND l.snap_date BETWEEN :f - 1 AND :t\n    WINDOW w AS (PARTITION BY l.isin ORDER BY l.snap_date)),\npairs AS MATERIALIZED (   -- once per pair of snapshot runs, not per bond\n    SELECT p.*, obpp.relearned_between(:k, p.prev_job, p.prev_date, p.job_id, p.snap_date) AS relearned\n      FROM (SELECT DISTINCT s.prev_job, s.prev_date, s.job_id, s.snap_date FROM s\n             WHERE s.snap_date >= :f AND s.prev_date IS NOT NULL) p),\nm AS (\n    SELECT s.*, s.prev_date IS NOT NULL AND NOT coalesce(p.relearned, false) AS compared\n      FROM s LEFT JOIN pairs p ON p.snap_date = s.snap_date AND p.prev_date = s.prev_date\n                              AND p.job_id IS NOT DISTINCT FROM s.job_id AND p.prev_job IS NOT DISTINCT FROM s.prev_job\n     WHERE s.snap_date >= :f)\nSELECT isin, max(issuer) AS issuer, max(coupon_pct) AS coupon_pct, max(maturity_date) AS maturity_date,\n       sum(CASE WHEN compared AND snap_date - prev_date = 1 AND prev_units > units_available\n                THEN prev_units - units_available END) AS units_sold,\n       sum(CASE WHEN compared AND snap_date - prev_date = 1 AND pct_sold > prev_pct THEN pct_sold - prev_pct END)\n           AS pct_up,\n       min(snap_date) FILTER (WHERE compared AND status = 'sold_out' AND prev_status IS DISTINCT FROM 'sold_out')\n           AS sold_out_on,\n       min(first_seen_on) AS first_seen_on\n  FROM m GROUP BY isin\n"
 LAST_SQL = 'SELECT max(snap_date) FROM obpp.listing_daily'
 FIRST_SQL = 'SELECT min(snap_date) FROM obpp.listing_daily'
 BENCH_SQL = 'SELECT * FROM obpp.platform_benchmark(:f, :t)'
+SITES_SQL = "SELECT task_key, name, status FROM ops.v_task WHERE kind = 'obpp_site' AND status <> 'off' ORDER BY name"
 PAIR_DAYS_SQL = 'SELECT count(DISTINCT snap_date) FROM obpp.listing_daily WHERE snap_date BETWEEN :f AND :t AND snap_date - 1 IN (SELECT snap_date FROM obpp.listing_daily)'
 
 def _bands(v: float | None, edges: list[float], labels: list[str]) -> str | None:
@@ -33,6 +34,16 @@ def _bucket(r: dict, scale: dict) -> str:
         return 'SOVEREIGN'
     code = r.get('nsdl_code') or r.get('rating_code') or ''
     return (scale.get(code) or {}).get('bucket', 'BELOW_BBB')
+
+def features() -> dict | None:
+    doc = db.setting('platform_features')
+    if not doc:
+        return None
+    rows = []
+    for s in db.rows(SITES_SQL):
+        f = doc['platforms'].get(s['task_key']) or {}
+        rows.append({'key': s['task_key'], 'name': s['name'], 'status': s['status'], 'amo': f.get('amo'), 'sell': f.get('sell')})
+    return {'checked_on': doc['checked_on'], 'rows': rows}
 
 def load(period: int, last: date) -> dict:
     to, frm = (last, last - timedelta(days=period - 1))
@@ -87,7 +98,7 @@ def platforms(request: Request):
     shared_n = len([g for g in gaps if g['gap'] > 0])
     site = q.get('site')
     drawer = _drawer(site, bench, by_site, sets, rows, frm, to, scale) if site else None
-    ctx.update(bench=bench, frm=frm, to=to, mix=mix, mix_legend=mix_legend, heat=heat, ranges=ranges, gaps=gaps[:12], shared_n=shared_n, first_day=first_day, pair_days=pair_days, drawer=drawer, names=names)
+    ctx.update(bench=bench, frm=frm, to=to, mix=mix, mix_legend=mix_legend, heat=heat, ranges=ranges, gaps=gaps[:12], shared_n=shared_n, first_day=first_day, pair_days=pair_days, drawer=drawer, names=names, features=features())
     return page(request, 'platforms.html', 'platforms', user, **ctx)
 
 def _drawer(key: str, bench: list[dict], by_site: dict, sets: dict, rows: list[dict], frm: date, to: date, scale: dict) -> dict | None:
@@ -108,7 +119,7 @@ def profile(key: str, bench: list[dict], by_site: dict, sets: dict, rows: list[d
         return None
     name = b['platform']
     mine = by_site.get(name, [])
-    task = db.row("SELECT config->>'list_url' AS url, state FROM ops.task WHERE task_key = :k", k=key) or {}
+    task = db.row('SELECT list_url AS url, state FROM ops.v_task WHERE task_key = :k', k=key) or {}
 
     def parts(counter: Counter, order: list[str]) -> list[tuple[str, int]]:
         return [(k, counter[k]) for k in order if counter.get(k)]

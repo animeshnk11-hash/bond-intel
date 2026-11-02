@@ -91,6 +91,7 @@ No parameters. Every online bond platform that is not a draft.
 | `items[].url` | string | The page the platform is read from |
 | `items[].last_snapshot` | date \| null | Day of the latest official read |
 | `items[].bonds_listed` / `bonds_live` | integer | Bonds in that read / of them, on sale |
+| `items[].features` | object | `amo` (`value`, `source`) and `sell` (`state`: `anytime` \| `limited` \| `none`, `note`, `source`), checked by hand from public pages; null when not checked |
 | `items[].last_run` | object \| null | `status`, `at`, `bonds` and `extra_read` (true when it was a Scrape now) of the latest finished run |
 | `count` | integer | Number of items |
 

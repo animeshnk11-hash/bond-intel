@@ -15,7 +15,7 @@ flowchart LR
         OBPP["OBPPs (11, 10 Live)<br/>bonds on offer"]
     end
     W["Bond Intel worker<br/>scheduled reads, learn & replay,<br/>guards, alerts"]
-    DB[("Bond Intel database<br/>8 tables, 90 days")]
+    DB[("Bond Intel database<br/>9 tables, 90 days")]
     subgraph Use["Where people see it"]
         DASH["Internal dashboard<br/>8 pages, admin actions"]
         PUB["Public read-only dashboard<br/>5 pages"]
@@ -43,7 +43,7 @@ flowchart LR
 | **Exchange loader** (part of the worker) | Fetches each trading day's bond trades from NSE and BSE (order book and BSE RFQ), combines them per bond and exchange, and keeps the day's highs, lows, values and yields as published |
 | **Reference loader** (part of the worker) | Fetches the bond master from NSDL, then the details of each newly traded bond (issuer, category, sector, rating and agency, coupon, maturity, security, seniority, cash flows) and the day's rating actions |
 | **OBPP reader** (part of the worker) | One reader for every platform, with no code per site. It learns a platform once from its address (where the bonds are, how to page, which field is which), saves that as a recipe and replays it on schedule. A read that looks broken (no bonds, under half the usual count, fields suddenly empty) is not saved: the last good data stays, an alert goes out, and after 3 failures in a row the platform pauses. A browser tab that crashes is tried again up to 5 times; a visit is cut off after 5 minutes and a run after 20 |
-| **Database** | 8 tables: exchange trades, OBPP listings (one official read per platform per day), the bond master, tasks and schedules, the job queue and run history, alerts and audit trail, settings, migrations. History is kept 90 days |
+| **Database** | 9 tables: exchange trades, OBPP listings (one official read per platform per day), the bond master, data sources, tasks and schedules, the job queue and run history, alerts and audit trail, settings, migrations. History is kept 90 days |
 | **Internal dashboard** | Eight pages for the team (Overview, Exchange, OBPP listings, Platforms, Category share, Sources, Daily report, Settings). Sign-in with a company account on an access list; admins manage sources, schedules, users and the report |
 | **Public read-only dashboard** | The five reading pages (Overview, Exchange, OBPP listings, Platforms, Category share) for anyone with the link. It can read only, changes nothing and has no API or admin pages |
 | **Bond Intel API** | JSON for other services: platforms, listings, bonds, categories, and Scrape now. On the internal dashboard only, with a shared key |

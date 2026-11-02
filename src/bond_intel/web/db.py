@@ -140,6 +140,10 @@ def setting(key: str, default=None, cache: bool=True):
     v = settings().get(key) if cache else scalar(SETTING_SQL, cache=False, k=key)
     return default if v is None else v
 
+def set_status(key: str, status: str, note: str, actor: str) -> None:
+    if not execute('UPDATE ops.source SET status = :s, note = :n WHERE source_key = :k', actor=actor, s=status, n=note, k=key):
+        execute('UPDATE ops.task SET status = :s, note = :n WHERE task_key = :k', actor=actor, s=status, n=note, k=key)
+
 def audit(actor: str, action: str, target: str | None=None, message: str | None=None, **details) -> None:
     execute("INSERT INTO ops.event (kind, actor, action, target, message, details) VALUES ('audit', :a, :ac, :t, :m, CAST(:d AS jsonb))", a=actor, ac=action, t=target, m=message, d=dumps(details))
 MAX_ATTEMPTS = {'obpp.scrape': 1, 'ref.enrich': 1, 'report.send': 1, 'exchange.backfill': 2}

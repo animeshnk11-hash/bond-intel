@@ -33,7 +33,7 @@ def asset_v(name: str) -> str:
     return hashlib.sha1((HERE / 'static' / name).read_bytes()).hexdigest()[:10]
 templates.env.globals['asset_v'] = asset_v
 NEXT_JOBS = {'exchange.eod': 'Exchange EOD', 'obpp.scrape': 'Platform listings', 'report.send': 'Daily report'}
-LAYOUT_SQL = "\nSELECT (SELECT value FROM cfg.setting WHERE key = 'worker_lease') AS lease,\n       (SELECT count(*) FROM ops.event WHERE kind = 'alert' AND status = 'open'\n           AND severity IN ('warn', 'critical')) AS alerts,\n       (SELECT coalesce(jsonb_agg(jsonb_build_object('job', job_type, 'status', status, 'times', times_local,\n                                                     'rule', day_rule)), '[]'::jsonb)\n          FROM ops.task WHERE times_local IS NOT NULL AND status = 'live'\n           AND job_type IN ('exchange.eod', 'obpp.scrape', 'report.send')) AS tasks\n"
+LAYOUT_SQL = "\nSELECT (SELECT value FROM cfg.setting WHERE key = 'worker_lease') AS lease,\n       (SELECT count(*) FROM ops.event WHERE kind = 'alert' AND status = 'open'\n           AND severity IN ('warn', 'critical')) AS alerts,\n       (SELECT coalesce(jsonb_agg(jsonb_build_object('job', job_type, 'status', status, 'times', times_local,\n                                                     'rule', day_rule)), '[]'::jsonb)\n          FROM ops.v_task WHERE times_local IS NOT NULL AND status = 'live'\n           AND job_type IN ('exchange.eod', 'obpp.scrape', 'report.send')) AS tasks\n"
 LAYOUT_Q = ('rows', LAYOUT_SQL, {})
 
 def _layout() -> tuple[dict, int]:
